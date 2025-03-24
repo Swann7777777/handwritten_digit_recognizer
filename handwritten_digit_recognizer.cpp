@@ -15,7 +15,8 @@ int main() {
 
 
 
-	//This is a test comment
+
+	//The test comment was deleted successfully if you see this message
 
 
 	// Constants initialization
