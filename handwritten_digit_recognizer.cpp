@@ -13,6 +13,11 @@ int main() {
 	//std::uniform_real_distribution<float> dis_bias(-1.0, 1.0);
 	//std::cout << "Initialized random number generator" << std::endl;
 
+
+
+	//This is a test comment
+
+
 	// Constants initialization
 	const int image_resolution = 28;
 	const int input_layer_neurons_count = image_resolution * image_resolution;
