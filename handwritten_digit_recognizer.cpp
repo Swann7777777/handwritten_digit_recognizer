@@ -14,7 +14,7 @@ int main() {
 	//std::cout << "Initialized random number generator" << std::endl;
 
 	// Constants initialization
-	const int image_resolution = 28;
+	const int image_resolution = 280;
 	const int input_layer_neurons_count = image_resolution * image_resolution;
 	const int hidden_layers_neurons_count = 16;
 	const int output_layer_neurons_count = 10;
