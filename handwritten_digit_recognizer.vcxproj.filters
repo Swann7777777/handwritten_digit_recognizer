@@ -20,16 +20,16 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\Swann7777777\handwritten_digit_recognizer\biases.csv">
+    <None Include="biases.csv">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="..\Swann7777777\handwritten_digit_recognizer\t10k-images.idx3-ubyte">
+    <None Include="t10k-images.idx3-ubyte">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="..\Swann7777777\handwritten_digit_recognizer\t10k-labels.idx1-ubyte">
+    <None Include="t10k-labels.idx1-ubyte">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="..\Swann7777777\handwritten_digit_recognizer\weights.csv">
+    <None Include="weights.csv">
       <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>

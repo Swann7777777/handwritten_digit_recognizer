@@ -4,19 +4,40 @@
 #include <random>
 #include <string>
 
+
+
+void randomize_parameters(std::vector<float>& weights, std::vector<float>& biases, int hidden_layers_neurons_count, int input_layer_neurons_count, int hidden_layers_count, int output_layer_neurons_count) {
+	//Random number generator initialization
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_real_distribution<float> weight_distribution(-1.0f, 1.0f);
+	std::uniform_real_distribution<float> bias_distribution(-1.0, 1.0);
+	
+	// Generate random weights
+	std::ofstream weights_file;
+	weights_file.open("weights.csv");
+	for (int i = 0; i < hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count; i++) {
+		weights_file << weight_distribution(gen) << "\n";
+	}
+
+	weights_file.close();
+	std::cout << "Generated random weights" << std::endl;
+
+	// Generate random biases
+
+	std::ofstream biases_file;
+	biases_file.open("biases.csv");
+	for (int i = 0; i < hidden_layers_neurons_count * hidden_layers_count + output_layer_neurons_count; i++) {
+		biases_file << bias_distribution(gen) << "\n";
+	}
+
+	biases_file.close();
+	std::cout << "Generated random biases" << std::endl;
+}
+
+
+
 int main() {
-
-	// Random number generator initialization
-	//std::random_device rd;
-	//std::mt19937 gen(rd());
-	//std::uniform_real_distribution<float> dis_weight(-1.0f, 1.0f);
-	//std::uniform_real_distribution<float> dis_bias(-1.0, 1.0);
-	//std::cout << "Initialized random number generator" << std::endl;
-
-
-
-
-	//The test comment was deleted successfully if you see this message
 
 
 	// Constants initialization
@@ -91,28 +112,6 @@ int main() {
 	}
 
 	std::cout << "Printed the image" << std::endl;
-
-
-	// Generate random weights
-	//std::ofstream weights_file;
-	//weights_file.open("weights.csv");
-	//for (int i = 0; i < hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count; i++) {
-		//weights_file << dis_weight(gen) << "\n";
-	//}
-
-	//weights_file.close();
-	//std::cout << "Generated random weights" << std::endl;
-
-	// Generate random biases
-
-	//std::ofstream biases_file;
-	//biases_file.open("biases.csv");
-	//for (int i = 0; i < hidden_layers_neurons_count * hidden_layers_count + output_layer_neurons_count; i++) {
-		//biases_file << dis_bias(gen) << "\n";
-	//}
-
-	//biases_file.close();
-	//std::cout << "Generated random biases" << std::endl;
 
 
 	// Open the weights file

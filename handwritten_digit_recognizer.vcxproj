@@ -130,10 +130,10 @@
     <ClCompile Include="handwritten_digit_recognizer.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\Swann7777777\handwritten_digit_recognizer\biases.csv" />
-    <None Include="..\Swann7777777\handwritten_digit_recognizer\t10k-images.idx3-ubyte" />
-    <None Include="..\Swann7777777\handwritten_digit_recognizer\t10k-labels.idx1-ubyte" />
-    <None Include="..\Swann7777777\handwritten_digit_recognizer\weights.csv" />
+    <None Include="biases.csv" />
+    <None Include="t10k-images.idx3-ubyte" />
+    <None Include="t10k-labels.idx1-ubyte" />
+    <None Include="weights.csv" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
