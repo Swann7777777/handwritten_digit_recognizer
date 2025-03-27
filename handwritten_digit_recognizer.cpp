@@ -29,8 +29,6 @@ void randomize_parameters(
 
 	weights_file.close();
 
-	std::cout << "Generated random weights" << std::endl;
-
 	// Generate random biases
 	std::ofstream biases_file;
 	biases_file.open("biases.csv");
@@ -39,30 +37,27 @@ void randomize_parameters(
 	}
 
 	biases_file.close();
-
-	std::cout << "Generated random biases" << std::endl;
 }
 
 
 
 
-
-
-
 std::vector<float> read_image(
+	int image_resolution,
 	std::ifstream& images,
 	std::vector<float>& input_layer_neurons,
-	int input_layer_neurons_count) {
+	int input_layer_neurons_count,
+	int image_index) {
 
-	// Read the image
-	char byte;
+	// Seek to the correct image position (16-byte header + image size * index)
+	images.seekg(16 + image_resolution * image_resolution * image_index, std::ios::beg);
+
+	// Read the entire image
 	for (int i = 0; i < input_layer_neurons_count; i++) {
-		images.get(byte);
-		float value = static_cast<float>(static_cast<unsigned char>(byte));
-		input_layer_neurons[i] = value;
+		unsigned char pixel;
+		images.read(reinterpret_cast<char*>(&pixel), 1);
+		input_layer_neurons[i] = static_cast<float>(pixel) / 255.0f;  // Normalize to [0, 1]
 	}
-
-	std::cout << "Read the image" << std::endl;
 
 	return input_layer_neurons;
 }
@@ -71,21 +66,21 @@ std::vector<float> read_image(
 
 
 
-
-
-
-std::vector<int> read_label(
+void read_label(
 	std::ifstream& labels,
-	std::vector<int>& expected_output_layer_neurons) {
+	std::vector<int>& expected_output_layer_neurons,
+	int image_index) {
+
+	// Seek to the correct label position (8-byte header + 1 byte per label)
+	labels.seekg(8 + image_index, std::ios::beg);
 
 	// Read the label
-	char label;
-	labels.get(label);
-	expected_output_layer_neurons[static_cast<unsigned>(label)] = 1;
+	unsigned char label;
+	labels.read(reinterpret_cast<char*>(&label), 1);
 
-	return expected_output_layer_neurons;
+	// Set the corresponding index to 1 (one-hot encoding)
+	expected_output_layer_neurons[label] = 1;
 }
-
 
 
 
@@ -109,9 +104,6 @@ void print_image(
 		}
 		std::cout << std::endl;
 	}
-
-	std::cout << "Printed the image" << std::endl;
-
 }
 
 
@@ -200,39 +192,194 @@ float compute_cost(
 
 void train(
 	int output_layer_neurons_count,
-	std::vector<float> output_layer_neurons,
-	std::vector<float> output_layer_neurons_error,
-	std::vector<int> expected_output_layer_neurons) {
+	std::vector<float>& output_layer_neurons_error,
+	std::vector<float>& normalized_output_layer_neurons,
+	std::vector<int>& expected_output_layer_neurons,
+	int hidden_layers_neurons_count,
+	std::vector<float>& weights_sensitivity,
+	int input_layer_neurons_count,
+	int hidden_layers_count,
+	std::vector<float>& hidden_layers_neurons,
+	std::vector<float>& biases_sensitivity,
+	std::vector<float>& hidden_layers_neurons_sensitivity,
+	std::vector<float>& weights,
+	std::vector<float>& input_layer_neurons,
+	float learning_rate,
+	std::vector<float>& biases,
+	std::vector<float>& weights_sensitivity_sum,
+	std::vector<float>& biases_sensitivity_sum) {
 
 	// Compute cost for each output layer neuron
 	for (int i = 0; i < output_layer_neurons_count; i++) {
-		output_layer_neurons_error[i] = output_layer_neurons[i] - expected_output_layer_neurons[i];
+		output_layer_neurons_error[i] = normalized_output_layer_neurons[i] - expected_output_layer_neurons[i];
 	}
 
 
-	// Compute the sensivity of each weight of the output layer
+	// Output layer weights
+	for (int i = 0; i < output_layer_neurons_count; i++) {
+		for (int j = 0; j < hidden_layers_neurons_count; j++) {
+			weights_sensitivity[input_layer_neurons_count * hidden_layers_neurons_count + (hidden_layers_count - 1) * hidden_layers_neurons_count * hidden_layers_neurons_count + i * hidden_layers_neurons_count + j] = hidden_layers_neurons[(hidden_layers_count - 1) * hidden_layers_neurons_count + j] * output_layer_neurons_error[i];
+		}
+	}
+
+	// Output layer biases
+	for (int i = 0; i < output_layer_neurons_count; i++) {
+		biases_sensitivity[hidden_layers_neurons_count * hidden_layers_count + i] = output_layer_neurons_error[i];
+	}
+
+	// Last hidden layer neurons
+	for (int i = 0; i < hidden_layers_neurons_count; i++) {
+		for (int j = 0; j < output_layer_neurons_count; j++) {
+			hidden_layers_neurons_sensitivity[(hidden_layers_count - 1) * hidden_layers_neurons_count + i] += output_layer_neurons_error[j] * weights[input_layer_neurons_count * hidden_layers_neurons_count + (hidden_layers_count - 1) * hidden_layers_neurons_count * hidden_layers_neurons_count + j * hidden_layers_neurons_count + i];
+		}
+		hidden_layers_neurons_sensitivity[(hidden_layers_count - 1) * hidden_layers_neurons_count + i] *= hidden_layers_neurons[(hidden_layers_count - 1) * hidden_layers_neurons_count + i] * (1 - hidden_layers_neurons[(hidden_layers_count - 1) * hidden_layers_neurons_count + i]);
+	}
+
+	// Hidden layers neurons
+	for (int i = 0; i < (hidden_layers_count - 1); i++) {
+		for (int j = 0; j < hidden_layers_neurons_count; j++) {
+			for (int k = 0; k < hidden_layers_neurons_count; k++) {
+				hidden_layers_neurons_sensitivity[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + j] += hidden_layers_neurons_sensitivity[(hidden_layers_count - 1 - i) * hidden_layers_neurons_count + k] * weights[input_layer_neurons_count * hidden_layers_neurons_count + (hidden_layers_count - 2 - i) * hidden_layers_neurons_count * hidden_layers_neurons_count + j * hidden_layers_neurons_count + k];
+			}
+			hidden_layers_neurons_sensitivity[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + j] *= hidden_layers_neurons[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + j] * (1 - hidden_layers_neurons[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + j]);
+		}
+	}
+
+	// Hidden layers weights
+	for (int i = 0; i < (hidden_layers_count - 1); i++) {
+		for (int j = 0; j < hidden_layers_neurons_count; j++) {
+			for (int k = 0; k < hidden_layers_neurons_count; k++) {
+				weights_sensitivity[input_layer_neurons_count * hidden_layers_neurons_count + (hidden_layers_count - 2 - i) * hidden_layers_neurons_count * hidden_layers_neurons_count + j * hidden_layers_neurons_count + k] = hidden_layers_neurons_sensitivity[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + k] * hidden_layers_neurons[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + j];
+			}
+		}
+	}
+
+	// Hidden layers biases
+	for (int i = 0; i < hidden_layers_count; i++) {
+		for (int j = 0; j < hidden_layers_neurons_count; j++) {
+			biases_sensitivity[(hidden_layers_count - 1 - i) * hidden_layers_neurons_count + j] = hidden_layers_neurons_sensitivity[(hidden_layers_count - 1 - i) * hidden_layers_neurons_count + j];
+		}
+	}
+
+	// Input layer weights
+	for (int i = 0; i < hidden_layers_neurons_count; i++) {
+		for (int j = 0; j < input_layer_neurons_count; j++) {
+			weights_sensitivity[i * input_layer_neurons_count + j] = hidden_layers_neurons_sensitivity[i] * input_layer_neurons[j];
+		}
+	}
+
+
+	// Add the weights sensitivity to the sum
+	for (int i = 0; i < hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count; i++) {
+		weights_sensitivity_sum[i] += weights_sensitivity[i];
+	}
+
+
+	// Add the biases sensitivity to the sum
+	for (int i = 0; i < hidden_layers_neurons_count * hidden_layers_count + output_layer_neurons_count; i++) {
+		biases_sensitivity_sum[i] += biases_sensitivity[i];
+	}
+}
+
+
+void update_parameters(
+	std::vector<float>& weights_sensitivity_sum,
+	int batch_size,
+	std::vector<float>& biases_sensitivity_sum,
+	int hidden_layers_neurons_count,
+	int input_layer_neurons_count,
+	int hidden_layers_count,
+	int output_layer_neurons_count,
+	std::vector<float>& weights,
+	float learning_rate,
+	std::vector<float>& weights_sensitivity,
+	std::vector<float>& biases,
+	std::vector<float>& biases_sensitivity) {
+
+
+	// Average the weights sensitivity sum
+	for (int i = 0; i < hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count; i++) {
+		weights_sensitivity_sum[i] /= batch_size;
+	}
+
+	// Average the biases sensitivity sum
+	for (int i = 0; i < hidden_layers_neurons_count * hidden_layers_count + output_layer_neurons_count; i++) {
+		biases_sensitivity_sum[i] /= batch_size;
+	}
 
 
 
+	// Update weights
+	for (int i = 0; i < hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count; i++) {
+		weights[i] -= learning_rate * weights_sensitivity_sum[i];
+	}
 
+
+	// Update biases
+	for (int i = 0; i < hidden_layers_neurons_count * hidden_layers_count + output_layer_neurons_count; i++) {
+		biases[i] -= learning_rate * biases_sensitivity_sum[i];
+	}
 }
 
 
 
 
 
+void update_parameters_files(
+	int hidden_layers_neurons_count,
+	int input_layer_neurons_count,
+	int hidden_layers_count,
+	int output_layer_neurons_count,
+	std::vector<float>& weights,
+	std::vector<float>& biases) {
+
+
+	// Update weights file
+	std::ofstream weights_file;
+	weights_file.open("weights.csv");
+	for (int i = 0; i < hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count; i++) {
+		weights_file << weights[i] << "\n";
+	}
+
+	weights_file.close();
+
+
+	// Update biases file
+	std::ofstream biases_file;
+	biases_file.open("biases.csv");
+	for (int i = 0; i < hidden_layers_neurons_count * hidden_layers_count + output_layer_neurons_count; i++) {
+		biases_file << biases[i] << "\n";
+	}
+
+	biases_file.close();
+}
 
 
 
-// Steps to train the network :
-// 1. Feedforward an image
-// 2. Calculate the cost for each neuron
-// 3. Calculate the sensivity of the weights and biases of the output layer
-// 4. Calculate the sensivity of the weights and biases of the hidden layers
-// 5. Update the weights and biases
-// 6. Repeat the process with a mini-batch of images
-// 7. Average the weights and biases
-// 8. Save the weights and biases
+
+void reset_vectors(
+	std::vector<float>& input_layer_neurons,
+	std::vector<float>& hidden_layers_neurons,
+	std::vector<float>& output_layer_neurons,
+	std::vector<float>& normalized_output_layer_neurons,
+	std::vector<float>& output_layer_neurons_error,
+	std::vector<float>& weights_sensitivity,
+	std::vector<float>& biases_sensitivity,
+	std::vector<float>& hidden_layers_neurons_sensitivity,
+	std::vector<int>& expected_output_layer_neurons) {
+	
+	// Set every vector values to 0
+	std::fill(input_layer_neurons.begin(), input_layer_neurons.end(), 0.0f);
+	std::fill(hidden_layers_neurons.begin(), hidden_layers_neurons.end(), 0.0f);
+	std::fill(output_layer_neurons.begin(), output_layer_neurons.end(), 0.0f);
+	std::fill(normalized_output_layer_neurons.begin(), normalized_output_layer_neurons.end(), 0.0f);
+	std::fill(output_layer_neurons_error.begin(), output_layer_neurons_error.end(), 0.0f);
+	std::fill(weights_sensitivity.begin(), weights_sensitivity.end(), 0.0f);
+	std::fill(biases_sensitivity.begin(), biases_sensitivity.end(), 0.0f);
+	std::fill(hidden_layers_neurons_sensitivity.begin(), hidden_layers_neurons_sensitivity.end(), 0.0f);
+	std::fill(expected_output_layer_neurons.begin(), expected_output_layer_neurons.end(), 0);
+}
+
 
 
 
@@ -248,23 +395,23 @@ int main() {
 	const int output_layer_neurons_count = 10;
 	const int hidden_layers_count = 2;
 	const float learning_rate = 0.1f;
-
-	std::cout << "Initialized constants" << std::endl;
+	const int batch_size = 64;
 
 
 	// Vectors initialization
 	std::vector<float> input_layer_neurons(input_layer_neurons_count, 0.0f);
 	std::vector<float> weights(hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count, 0.0f);
-	std::vector<float> hidden_layer_neurons(hidden_layers_neurons_count * hidden_layers_count, 0.0f);
+	std::vector<float> hidden_layers_neurons(hidden_layers_neurons_count * hidden_layers_count, 0.0f);
 	std::vector<float> biases(hidden_layers_neurons_count * hidden_layers_count + output_layer_neurons_count, 0.0f);
 	std::vector<float> output_layer_neurons(output_layer_neurons_count, 0.0f);
 	std::vector<float> normalized_output_layer_neurons(output_layer_neurons_count, 0.0f);
 	std::vector<float> output_layer_neurons_error(output_layer_neurons_count, 0.0f);
-	std::vector<float> weights_sensivity(hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count, 0.0f);
-	std::vector<float> hidden_layer_neurons_sensitivity((hidden_layers_count - 1) * hidden_layers_neurons_count * hidden_layers_neurons_count, 0.0f);
+	std::vector<float> weights_sensitivity(hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count, 0.0f);
+	std::vector<float> biases_sensitivity(hidden_layers_neurons_count * hidden_layers_count + output_layer_neurons_count, 0.0f);
+	std::vector<float> hidden_layers_neurons_sensitivity((hidden_layers_count - 1) * hidden_layers_neurons_count * hidden_layers_neurons_count, 0.0f);
+	std::vector<float> weights_sensitivity_sum(hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count, 0.0f);
+	std::vector<float> biases_sensitivity_sum(hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count, 0.0f);
 	std::vector<int> expected_output_layer_neurons(output_layer_neurons_count, 0);
-
-	std::cout << "Initialized vectors" << std::endl;
 
 
 	// Dataset loading
@@ -284,9 +431,6 @@ int main() {
 	}
 	labels.seekg(8, std::ios::beg);
 
-	std::cout << "Loaded dataset" << std::endl;
-
-
 
 	// Open the weights file
 	std::ifstream weights_data("weights.csv");
@@ -294,7 +438,6 @@ int main() {
 		std::cerr << "Error opening file" << std::endl;
 		return 1;
 	}
-	std::cout << "Opened the weights file" << std::endl;
 
 
 	// Read the weights
@@ -305,7 +448,6 @@ int main() {
 
 	}
 
-	std::cout << "Read the weights" << std::endl;
 
 
 	// Open the biases file
@@ -314,7 +456,6 @@ int main() {
 		std::cerr << "Error opening file" << std::endl;
 		return 1;
 	}
-	std::cout << "Opened the biases file" << std::endl;
 
 
 
@@ -323,88 +464,41 @@ int main() {
 		std::getline(biases_data, line);
 		biases[i] = std::stof(line);
 	}
-	std::cout << "Read the biases" << std::endl;
 
 
 
 
 
+	int image_index = 0;
 
 
-	read_image(images, input_layer_neurons, input_layer_neurons_count);
+	for (int i = 0; i < 100; i++) {
+		for (int j = 0; j < batch_size; j++) {
 
-	read_label(labels, expected_output_layer_neurons);
+			read_image(image_resolution, images, input_layer_neurons, input_layer_neurons_count, image_index);
 
-	print_image(image_resolution, input_layer_neurons);
+			read_label(labels, expected_output_layer_neurons, image_index);
 
-	feedforward(hidden_layers_neurons_count, input_layer_neurons_count, hidden_layer_neurons, input_layer_neurons, weights, biases, hidden_layers_count, output_layer_neurons, normalized_output_layer_neurons, output_layer_neurons_count);
+			//print_image(image_resolution, input_layer_neurons);
 
-	compute_cost(output_layer_neurons_count, expected_output_layer_neurons, normalized_output_layer_neurons);
+			feedforward(hidden_layers_neurons_count, input_layer_neurons_count, hidden_layers_neurons, input_layer_neurons, weights, biases, hidden_layers_count, output_layer_neurons, normalized_output_layer_neurons, output_layer_neurons_count);
 
+			compute_cost(output_layer_neurons_count, expected_output_layer_neurons, normalized_output_layer_neurons);
 
+			train(output_layer_neurons_count, output_layer_neurons_error, normalized_output_layer_neurons, expected_output_layer_neurons, hidden_layers_neurons_count, weights_sensitivity, input_layer_neurons_count, hidden_layers_count, hidden_layers_neurons, biases_sensitivity, hidden_layers_neurons_sensitivity, weights, input_layer_neurons, learning_rate, biases, weights_sensitivity_sum, biases_sensitivity_sum);
 
+			std::cout << "Predicted number : " << std::distance(normalized_output_layer_neurons.begin(), std::max_element(normalized_output_layer_neurons.begin(), normalized_output_layer_neurons.end())) << "\n";
 
-
-
-
-
-	// Compute cost for each output layer neuron
-	for (int i = 0; i < output_layer_neurons_count; i++) {
-		output_layer_neurons_error[i] = normalized_output_layer_neurons[i] - expected_output_layer_neurons[i];
-	}
+			reset_vectors(input_layer_neurons, hidden_layers_neurons, output_layer_neurons, normalized_output_layer_neurons, output_layer_neurons_error, weights_sensitivity, biases_sensitivity, hidden_layers_neurons_sensitivity, expected_output_layer_neurons);
 
 
-	// Output layer weights
-	for (int i = 0; i < output_layer_neurons_count; i++) {
-		for (int j = 0; j < hidden_layers_neurons_count; j++) {
-			weights_sensivity[input_layer_neurons_count * hidden_layers_neurons_count + (hidden_layers_count - 1) * hidden_layers_neurons_count * hidden_layers_neurons_count + i * hidden_layers_neurons_count + j] = hidden_layer_neurons[(hidden_layers_count - 1) * hidden_layers_neurons_count + j] * output_layer_neurons_error[i];
+			image_index++;
 		}
+
+		update_parameters(weights_sensitivity_sum, batch_size, biases_sensitivity_sum, hidden_layers_neurons_count, input_layer_neurons_count, hidden_layers_count, output_layer_neurons_count, weights, learning_rate, weights_sensitivity, biases, biases_sensitivity);
+
+		update_parameters_files(hidden_layers_neurons_count, input_layer_neurons_count, hidden_layers_count, output_layer_neurons_count, weights, biases);
 	}
-
-	// Last hidden layer neurons
-	for (int i = 0; i < hidden_layers_neurons_count; i++) {
-		for (int j = 0; j < output_layer_neurons_count; j++) {
-			hidden_layer_neurons_sensitivity[(hidden_layers_count - 1) * hidden_layers_neurons_count + i] += output_layer_neurons_error[j] * weights[input_layer_neurons_count * hidden_layers_neurons_count + (hidden_layers_count - 1) * hidden_layers_neurons_count * hidden_layers_neurons_count + i * output_layer_neurons_count + j];
-		}
-		hidden_layer_neurons_sensitivity[(hidden_layers_count - 1) * hidden_layers_neurons_count + i] *= hidden_layer_neurons[(hidden_layers_count - 1) * hidden_layers_neurons_count + i] * (1 - hidden_layer_neurons[(hidden_layers_count - 1) * hidden_layers_neurons_count + i]);
-	}
-
-	// Hidden layers neurons
-	for (int i = 0; i < (hidden_layers_count - 1); i++) {
-		for (int j = 0; j < hidden_layers_neurons_count; j++) {
-			for (int k = 0; k < hidden_layers_neurons_count; k++) {
-				hidden_layer_neurons_sensitivity[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + j] += hidden_layer_neurons_sensitivity[(hidden_layers_count - 1 - i) * hidden_layers_neurons_count + k] * weights[input_layer_neurons_count * hidden_layers_neurons_count + (hidden_layers_count - 2 - i) * hidden_layers_neurons_count * hidden_layers_neurons_count + j * hidden_layers_neurons_count + k];
-			}
-			hidden_layer_neurons_sensitivity[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + j] *= hidden_layer_neurons[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + j] * (1 - hidden_layer_neurons[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + j]);
-		}
-	}
-
-	// Hidden layers weights and neurons
-	for (int i = 0; i < (hidden_layers_count - 1); i++) {
-		for (int j = 0; j < hidden_layers_neurons_count; j++) {
-			for (int k = 0; k < hidden_layers_neurons_count; k++) {
-				weights_sensivity[input_layer_neurons_count * hidden_layers_neurons_count + (hidden_layers_count - 2 - i) * hidden_layers_neurons_count * hidden_layers_neurons_count + j * hidden_layers_neurons_count + k] = hidden_layer_neurons_sensitivity[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + k] * hidden_layer_neurons[(hidden_layers_count - 2 - i) * hidden_layers_neurons_count + j];
-			}
-		}
-	}
-
-
-	for (int i = 0; i < hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count; i++) {
-		weights[i] -= learning_rate * weights_sensivity[i];
-	}
-
-
-	std::ofstream weights_file;
-	weights_file.open("weights.csv");
-	for (int i = 0; i < hidden_layers_neurons_count * input_layer_neurons_count + (hidden_layers_count - 1) * (hidden_layers_neurons_count * hidden_layers_neurons_count) + hidden_layers_neurons_count * output_layer_neurons_count; i++) {
-		weights_file << weights[i] << "\n";
-	}
-
-	weights_file.close();
-
-
-
-
 
 	return 0;
 }
