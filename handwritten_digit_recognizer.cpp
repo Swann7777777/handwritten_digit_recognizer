@@ -16,8 +16,8 @@ void randomize_parameters(
 	//Random number generator initialization
 	std::random_device rd;
 	std::mt19937 gen(rd());
-	std::uniform_real_distribution<float> weight_distribution(-1.0f, 1.0f);
-	std::uniform_real_distribution<float> bias_distribution(-1.0, 1.0);
+	std::uniform_real_distribution<float> weight_distribution(-0.5f, 0.5f);
+	std::uniform_real_distribution<float> bias_distribution(-0.5f, 0.5f);
 	
 	// Generate random weights
 	std::ofstream weights_file;
@@ -396,13 +396,13 @@ int main() {
 	// Constants initialization
 	const int image_resolution = 28;
 	const int input_layer_neurons_count = image_resolution * image_resolution;
-	const int hidden_layers_neurons_count = 16;
+	const int hidden_layers_neurons_count = 32;
 	const int output_layer_neurons_count = 10;
 	const int hidden_layers_count = 2;
 	const float learning_rate = 0.01f;
-	const int batch_size = 128;
-	const int epoch_count = 78;
-	const int dataset_size = 60000;
+	const int batch_size = 256;
+	const int epoch_count = 39;
+	const int dataset_size = 10000;
 
 
 	// Vectors initialization
@@ -476,10 +476,15 @@ int main() {
 
 	biases_data.close();
 
+
 	//randomize_parameters(hidden_layers_neurons_count, input_layer_neurons_count, hidden_layers_count, output_layer_neurons_count);
 
 
 	int image_index = 0;
+
+	float accuracy = 0.0f;
+
+	float accuracy_sum = 0.0f;
 
 	float cost = 0.0f;
 
@@ -493,7 +498,7 @@ int main() {
 
 				read_label(labels, expected_output_layer_neurons, image_index);
 
-				//print_image(image_resolution, input_layer_neurons);
+				print_image(image_resolution, input_layer_neurons);
 
 				feedforward(hidden_layers_neurons_count, input_layer_neurons_count, hidden_layers_neurons, input_layer_neurons, weights, biases, hidden_layers_count, output_layer_neurons, normalized_output_layer_neurons, output_layer_neurons_count);
 
@@ -501,22 +506,28 @@ int main() {
 
 				cost_sum += cost;
 
-				train(output_layer_neurons_count, output_layer_neurons_error, normalized_output_layer_neurons, expected_output_layer_neurons, hidden_layers_neurons_count, weights_sensitivity, input_layer_neurons_count, hidden_layers_count, hidden_layers_neurons, biases_sensitivity, hidden_layers_neurons_sensitivity, weights, input_layer_neurons, learning_rate, biases, weights_sensitivity_sum, biases_sensitivity_sum);
+				//train(output_layer_neurons_count, output_layer_neurons_error, normalized_output_layer_neurons, expected_output_layer_neurons, hidden_layers_neurons_count, weights_sensitivity, input_layer_neurons_count, hidden_layers_count, hidden_layers_neurons, biases_sensitivity, hidden_layers_neurons_sensitivity, weights, input_layer_neurons, learning_rate, biases, weights_sensitivity_sum, biases_sensitivity_sum);
 
-				//std::cout << "\nPredicted number : " << std::distance(normalized_output_layer_neurons.begin(), std::max_element(normalized_output_layer_neurons.begin(), normalized_output_layer_neurons.end())) << "\nActual number : " << std::distance(expected_output_layer_neurons.begin(), std::max_element(expected_output_layer_neurons.begin(), expected_output_layer_neurons.end()));
-
-				reset_vectors(input_layer_neurons, hidden_layers_neurons, output_layer_neurons, normalized_output_layer_neurons, output_layer_neurons_error, weights_sensitivity, biases_sensitivity, hidden_layers_neurons_sensitivity, expected_output_layer_neurons);
-
+				std::cout << "\nPredicted number : " << std::distance(normalized_output_layer_neurons.begin(), std::max_element(normalized_output_layer_neurons.begin(), normalized_output_layer_neurons.end())) << "\nActual number : " << std::distance(expected_output_layer_neurons.begin(), std::max_element(expected_output_layer_neurons.begin(), expected_output_layer_neurons.end()));
 
 				image_index = (image_index + 1) % dataset_size;
+
+				if (std::distance(normalized_output_layer_neurons.begin(), std::max_element(normalized_output_layer_neurons.begin(), normalized_output_layer_neurons.end())) == std::distance(expected_output_layer_neurons.begin(), std::max_element(expected_output_layer_neurons.begin(), expected_output_layer_neurons.end()))) {
+					accuracy_sum += 1;
+				}
+				
+				reset_vectors(input_layer_neurons, hidden_layers_neurons, output_layer_neurons, normalized_output_layer_neurons, output_layer_neurons_error, weights_sensitivity, biases_sensitivity, hidden_layers_neurons_sensitivity, expected_output_layer_neurons);
 			}
 
 			/*if (cost_sum / batch_size > cost) {
 				return 2;
 			}*/
+
 			cost = cost_sum / batch_size;
 
-			std::cout << "\033[2J\033[1;1H" << cost;
+			accuracy = accuracy_sum / batch_size;
+
+			std::cout << "\033[2J\033[1;1H" << cost << "\n" << accuracy;
 
 			update_parameters(weights_sensitivity_sum, batch_size, biases_sensitivity_sum, hidden_layers_neurons_count, input_layer_neurons_count, hidden_layers_count, output_layer_neurons_count, weights, learning_rate, weights_sensitivity, biases, biases_sensitivity);
 
@@ -527,6 +538,7 @@ int main() {
 
 			cost_sum = 0;
 
+			accuracy_sum = 0;
 		}
 		image_index = 0;
 	}
